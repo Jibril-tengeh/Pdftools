@@ -1,0 +1,6 @@
+{
+  "name": "PDF Tools",
+  "description": "Boîte à outils PDF complète et sécurisée : fusionner, diviser, organiser, convertir des images, filigraner, signer et gérer vos documents directement dans votre navigateur sans téléversement sur serveur.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

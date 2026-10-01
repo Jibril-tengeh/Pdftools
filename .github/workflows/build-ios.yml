@@ -1,0 +1,52 @@
+name: Build iOS with Capacitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_scheme:
+        description: 'Type de compilation iOS'
+        required: true
+        default: 'App'
+        type: string
+
+jobs:
+  build-ios:
+    name: 🍎 Compiler / Vérifier iOS (Capacitor)
+    runs-on: macos-latest
+
+    steps:
+      - name: 📥 Récupérer le code source
+        uses: actions/checkout@v4
+
+      - name: 🟢 Configurer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Installer les dépendances npm
+        run: |
+          npm install --legacy-peer-deps
+
+      - name: 🔨 Compiler l'application Web (Vite)
+        run: |
+          npm run build
+
+      - name: 🔄 Initialiser & Synchroniser Capacitor iOS
+        run: |
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
+          npx cap sync ios
+
+      - name: 🍏 Vérifier et construire le projet Xcode (sans signature pour simulateur)
+        run: |
+          cd ios/App
+          xcodebuild -workspace App.xcworkspace -scheme App -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO clean build
+
+      - name: 📤 Téléverser le projet iOS prêt pour Xcode
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Tools-iOS-Workspace
+          path: ios/
+          retention-days: 14

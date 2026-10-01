@@ -1,0 +1,189 @@
+name: Build Android APK & AAB (Capacitor)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Type de build à compiler (debug, release, all)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'debug'
+          - 'release'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-android:
+    name: 📱 Compiler Android APK / AAB
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 1. Récupération du code source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 🟢 2. Configuration de Node.js (v22 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: ☕ 3. Configuration de Java JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: 🤖 4. Configuration Android SDK & Acceptation des Licences
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          yes | sdkmanager --licenses || true
+
+      - name: 📦 5. Installation des dépendances npm
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
+
+      - name: 🔍 6. Diagnostic des versions et de l'environnement
+        run: |
+          echo "=================== DIAGNOSTIC SYSTÈME ==================="
+          echo "Node version: $(node --version)"
+          echo "NPM version: $(npm --version)"
+          echo "Java version:"
+          java -version
+          echo "Capacitor CLI version:"
+          npx cap --version || true
+          echo "=========================================================="
+
+      - name: 🔨 7. Compilation des assets Web (Vite)
+        run: |
+          npm run build
+
+      - name: 🔄 8. Initialisation et synchronisation Capacitor Android
+        run: |
+          if [ ! -d "android" ]; then
+            echo "Plateforme Android absente, création..."
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: 🔑 9. Permissions d'exécution Gradle
+        run: chmod +x android/gradlew
+
+      - name: 📊 10. Diagnostic Gradle & AGP
+        run: |
+          cd android
+          ./gradlew --version
+
+      # -------------------------------------------------------------
+      # BUILD DEBUG APK
+      # -------------------------------------------------------------
+      - name: ⚡ 11. Compilation APK Debug
+        if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'all' || github.event_name != 'workflow_dispatch' }}
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace
+          
+          # Renommage pour clarté
+          mkdir -p ../build-outputs/debug
+          cp app/build/outputs/apk/debug/app-debug.apk ../build-outputs/debug/pdf-tools-debug.apk
+
+      - name: 📤 12. Téléversement APK Debug (Artifact)
+        if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'all' || github.event_name != 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Tools-Android-Debug-APK
+          path: build-outputs/debug/pdf-tools-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # -------------------------------------------------------------
+      # BUILD RELEASE APK & AAB (AVEC OU SANS SIGNATURE)
+      # -------------------------------------------------------------
+      - name: 🔐 13. Préparation Keystore de signature (si secret présent)
+        id: keystore-setup
+        if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'all' || github.event_name != 'workflow_dispatch' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Keystore secret détecté, décodage..."
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+            echo "has_keystore=true" >> $GITHUB_OUTPUT
+          else
+            echo "Aucun keystore configuré dans GitHub Secrets. Génération non-signée..."
+            echo "has_keystore=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🚀 14. Compilation APK & AAB Release
+        if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'all' || github.event_name != 'workflow_dispatch' }}
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          HAS_KEYSTORE: ${{ steps.keystore-setup.outputs.has_keystore }}
+        run: |
+          cd android
+          mkdir -p ../build-outputs/release
+
+          if [ "$HAS_KEYSTORE" = "true" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ]; then
+            echo "Compilation en mode Release SIGNÉ..."
+            ./gradlew assembleRelease bundleRelease \
+              -Pandroid.injected.signing.store.file=release.keystore \
+              -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+              -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+              -Pandroid.injected.signing.key.password="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}" \
+              --stacktrace
+
+            find app/build/outputs/apk/release -name "*.apk" -exec cp {} ../build-outputs/release/pdf-tools-release.apk \;
+            find app/build/outputs/bundle/release -name "*.aab" -exec cp {} ../build-outputs/release/pdf-tools-release.aab \;
+          else
+            echo "Compilation en mode Release non signé..."
+            ./gradlew assembleRelease bundleRelease --stacktrace || true
+
+            find app/build/outputs/apk/release -name "*.apk" -exec cp {} ../build-outputs/release/pdf-tools-release-unsigned.apk \; || true
+            find app/build/outputs/bundle/release -name "*.aab" -exec cp {} ../build-outputs/release/pdf-tools-release-unsigned.aab \; || true
+          fi
+
+      - name: 🧹 15. Nettoyage sécurisé du Keystore temporaire
+        if: always()
+        run: |
+          rm -f android/app/release.keystore
+
+      - name: 📤 16. Téléversement APK Release (Artifact)
+        if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'all' || github.event_name != 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Tools-Android-Release-APK
+          path: build-outputs/release/*release*.apk
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: 📤 17. Téléversement Bundle AAB Google Play (Artifact)
+        if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'all' || github.event_name != 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Tools-Android-PlayStore-AAB
+          path: build-outputs/release/*release*.aab
+          if-no-files-found: ignore
+          retention-days: 30

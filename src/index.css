@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+:root {
+  --card-bg: linear-gradient(180deg, #ffffff 0%, #ffffff 60%, #f8fafc 100%);
+  --card-border: rgba(226, 232, 240, 0.95);
+  --card-ledge: #cbd5e1;
+  --card-ledge-hover: #94a3b8;
+  --card-ledge-pressed: #94a3b8;
+  --tab-inactive-bg: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+  --tab-inactive-hover-bg: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  --tab-inactive-ledge: #cbd5e1;
+  --tab-inactive-ledge-hover: #94a3b8;
+  --tab-inactive-color: #1e293b;
+}
+
+.dark {
+  --card-bg: linear-gradient(180deg, #1e293b 0%, #0f172a 60%, #090d16 100%);
+  --card-border: rgba(51, 65, 85, 0.85);
+  --card-ledge: #334155;
+  --card-ledge-hover: #475569;
+  --card-ledge-pressed: #1e293b;
+  --tab-inactive-bg: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  --tab-inactive-hover-bg: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+  --tab-inactive-ledge: #334155;
+  --tab-inactive-ledge-hover: #475569;
+  --tab-inactive-color: #f8fafc;
+}
+
+@keyframes float3d {
+  0%, 100% {
+    transform: translateY(0px) rotateX(0deg) rotateY(0deg);
+  }
+  50% {
+    transform: translateY(-3px) rotateX(1.2deg) rotateY(-1.2deg);
+  }
+}
+
+@keyframes cardFloat3d {
+  0%, 100% {
+    transform: translateY(0px) rotateX(1deg) rotateY(0deg) translateZ(0px);
+    box-shadow: 0 5px 0 var(--card-ledge), 0 8px 16px -2px rgba(15, 23, 42, 0.08), inset 0 1.5px 0 rgba(255, 255, 255, 0.95);
+  }
+  50% {
+    transform: translateY(-6px) rotateX(3deg) rotateY(-1.2deg) translateZ(10px);
+    box-shadow: 0 10px 0 var(--card-ledge), 0 16px 26px -3px rgba(15, 23, 42, 0.14), inset 0 1.5px 0 rgba(255, 255, 255, 1);
+  }
+}
+
+@keyframes sweepGleam {
+  0% {
+    opacity: 0;
+    transform: translateX(-150%) rotate(25deg);
+  }
+  25% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0;
+    transform: translateX(260%) rotate(25deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(260%) rotate(25deg);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@keyframes pulse3d {
+  0%, 100% {
+    filter: drop-shadow(0 0 0px transparent);
+  }
+  50% {
+    filter: drop-shadow(0 4px 12px currentColor);
+  }
+}
+
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+
