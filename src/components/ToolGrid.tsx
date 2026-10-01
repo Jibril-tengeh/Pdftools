@@ -117,7 +117,7 @@ export const ToolGrid: React.FC<ToolGridProps> = ({
     },
     {
       id: 'images-to-pdf' as ToolId,
-      name: 'Convertir en PDF (Images / Docs)',
+      name: 'Images en PDF (Image to PDF)',
       description: 'Convertissez instantanément vos photos (JPG, PNG, WEBP) ou documents en un fichier PDF haute fidélité.',
       category: 'Conversion',
       categoryKey: 'pdf',
@@ -914,7 +914,7 @@ export const ToolGrid: React.FC<ToolGridProps> = ({
     {
       key: 'image' as ToolCategoryKey,
       label: 'Images',
-      count: tools.filter((t) => t.categoryKey === 'image').length,
+      count: tools.filter((t) => t.categoryKey === 'image' || t.id === 'images-to-pdf').length,
       icon: ImageIcon,
       accent: {
         gradient: 'linear-gradient(180deg, #10b981 0%, #059669 55%, #047857 100%)',
@@ -974,7 +974,7 @@ export const ToolGrid: React.FC<ToolGridProps> = ({
   ];
 
   const filteredTools = tools.filter((tool) => {
-    const matchesCategory = tool.categoryKey === selectedCategory;
+    const matchesCategory = tool.categoryKey === selectedCategory || (selectedCategory === 'image' && tool.id === 'images-to-pdf');
     const matchesSearch =
       searchQuery === '' ||
       tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
