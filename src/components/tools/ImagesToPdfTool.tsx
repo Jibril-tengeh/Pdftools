@@ -21,10 +21,12 @@ import {
   Stamp,
   Type,
   Palette,
+  SlidersHorizontal,
+  Layers,
 } from 'lucide-react';
 import { DropZone } from '../DropZone';
 import { convertImagesToPdf, addWatermarkToPdf, downloadFile, formatBytes, renderPdfThumbnail } from '../../utils/pdfOperations';
-import { addRecentFile } from '../../utils/recentFiles';
+import { addRecentFile, openPdfInTool } from '../../utils/recentFiles';
 import type {
   ImageToPdfItem,
   PageSizeOption,
@@ -830,6 +832,28 @@ export const ImagesToPdfTool: React.FC = () => {
 
           {/* Images List */}
           <div className="space-y-2.5">
+            <div className="flex items-center justify-between pb-1">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {images.length} photo{images.length > 1 ? 's' : ''} dans cet album
+              </span>
+              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold hover:bg-emerald-100 cursor-pointer transition-colors shadow-2xs">
+                <Plus className="w-3.5 h-3.5" />
+                <span>Ajouter d'autres photos</span>
+                <input
+                  id="add-more-images-input"
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleImagesSelected(Array.from(e.target.files));
+                      e.target.value = '';
+                    }
+                  }}
+                />
+              </label>
+            </div>
             {images.map((img, idx) => (
               <div
                 key={img.id}
@@ -1029,10 +1053,62 @@ export const ImagesToPdfTool: React.FC = () => {
                 <span>Enregistrer / Partager le fichier</span>
               </button>
 
+              {/* Options Modifier ou Ajouter */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">
+                  Options : Modifier ou Ajouter
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDoneModal(false);
+                    const fileInput = document.getElementById('add-more-images-input');
+                    if (fileInput) fileInput.click();
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center gap-2 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Ajouter d'autres photos à cet album</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDoneModal(false);
+                    const buffer = lastGeneratedPdf.bytes.buffer.slice(
+                      lastGeneratedPdf.bytes.byteOffset,
+                      lastGeneratedPdf.bytes.byteOffset + lastGeneratedPdf.bytes.byteLength
+                    ) as ArrayBuffer;
+                    openPdfInTool('organize', buffer, lastGeneratedPdf.name);
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 text-xs font-bold flex items-center justify-center gap-2 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 transition-colors cursor-pointer"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Modifier les pages (Tourner, Réorganiser)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDoneModal(false);
+                    const buffer = lastGeneratedPdf.bytes.buffer.slice(
+                      lastGeneratedPdf.bytes.byteOffset,
+                      lastGeneratedPdf.bytes.byteOffset + lastGeneratedPdf.bytes.byteLength
+                    ) as ArrayBuffer;
+                    openPdfInTool('merge', buffer, lastGeneratedPdf.name);
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center justify-center gap-2 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition-colors cursor-pointer"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Ajouter un autre document (Fusionner)</span>
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setShowDoneModal(false)}
-                className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors cursor-pointer text-center"
+                className="w-full py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors cursor-pointer text-center"
               >
                 Fermer
               </button>

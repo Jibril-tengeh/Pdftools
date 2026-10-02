@@ -72,6 +72,19 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  useEffect(() => {
+    const handleOpenInTool = (e: any) => {
+      const { toolId, buffer } = e.detail || {};
+      if (toolId && buffer) {
+        setSampleBuffer(buffer);
+        setCurrentTool(toolId);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
+    window.addEventListener('open_pdf_in_tool', handleOpenInTool);
+    return () => window.removeEventListener('open_pdf_in_tool', handleOpenInTool);
+  }, []);
+
   // Generate a realistic multi-page PDF sample
   const handleGenerateSample = async (targetTool?: ToolId) => {
     setIsGeneratingSample(true);

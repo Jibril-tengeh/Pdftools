@@ -87,6 +87,20 @@ export function hasCachedBlob(id: string): boolean {
   return memoryFileBlobs.has(id);
 }
 
+export async function getCachedArrayBuffer(id: string): Promise<ArrayBuffer | null> {
+  const cached = memoryFileBlobs.get(id);
+  if (!cached) return null;
+  return await cached.blob.arrayBuffer();
+}
+
+export function openPdfInTool(toolId: ToolId, buffer: ArrayBuffer, filename: string) {
+  window.dispatchEvent(
+    new CustomEvent('open_pdf_in_tool', {
+      detail: { toolId, buffer, filename },
+    })
+  );
+}
+
 export function removeRecentFile(id: string) {
   memoryFileBlobs.delete(id);
   try {
