@@ -7,7 +7,19 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
-html, body {
+/* Réduction globale de -4px de tout texte dans l'application (base standard 16px -> 12px) */
+html {
+  font-size: 12px !important;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
@@ -23,4 +35,21 @@ html, body {
   max-width: 100vw;
   overflow-x: hidden;
   min-height: 100vh;
+}
+
+/* Réduction sur les classes de taille arbitraire en pixels */
+[class*="text-[11px]"] {
+  font-size: 8px !important;
+}
+
+[class*="text-[10px]"] {
+  font-size: 7.5px !important;
+}
+
+[class*="text-[9px]"] {
+  font-size: 7px !important;
+}
+
+[class*="text-[8.5px]"] {
+  font-size: 6.5px !important;
 }
