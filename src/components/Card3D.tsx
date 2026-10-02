@@ -55,6 +55,7 @@ export const Card3D: React.FC<Card3DProps> = ({
         </div>
       </div>
 
+      {/* Bouton d'action "Ouvrir" très bien visible */}
       <div className="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 w-full">
         <button
           type="button"

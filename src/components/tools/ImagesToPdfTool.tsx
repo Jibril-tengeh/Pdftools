@@ -70,6 +70,9 @@ export const ImagesToPdfTool: React.FC = () => {
   const [previewCurrentPage, setPreviewCurrentPage] = useState<number>(1);
   const [previewTotalPages, setPreviewTotalPages] = useState<number>(1);
   const [previewThumbnailUrl, setPreviewThumbnailUrl] = useState<string | null>(null);
+  const [lastGeneratedPdf, setLastGeneratedPdf] = useState<{ bytes: Uint8Array; name: string } | null>(null);
+  const [downloadBtnStatus, setDownloadBtnStatus] = useState<'idle' | 'generating' | 'success'>('idle');
+  const [showDoneModal, setShowDoneModal] = useState<boolean>(false);
 
   const handleImagesSelected = async (files: File[]) => {
     const newItems: ImageToPdfItem[] = [];
@@ -221,12 +224,13 @@ export const ImagesToPdfTool: React.FC = () => {
   const handleConvert = async () => {
     if (images.length === 0) return;
     setIsProcessing(true);
+    setDownloadBtnStatus('generating');
     setSuccessMessage(null);
 
     try {
       const pdfBytes = previewPdfBytes || (await buildPdf());
       const safeFilename = customFilename.endsWith('.pdf') ? customFilename : `${customFilename}.pdf`;
-      downloadFile(pdfBytes, safeFilename);
+      setLastGeneratedPdf({ bytes: pdfBytes, name: safeFilename });
 
       const calculatedPages = Math.ceil(images.length / gridMode);
 
@@ -239,11 +243,20 @@ export const ImagesToPdfTool: React.FC = () => {
         data: pdfBytes,
       });
 
-      setSuccessMessage(`Document PDF généré avec succès (${calculatedPages} pages générées) !`);
-      setShowPreviewModal(false);
+      setSuccessMessage(`Document PDF généré avec succès (${calculatedPages} page${calculatedPages > 1 ? 's' : ''}) !`);
+      setDownloadBtnStatus('success');
+      setShowDoneModal(true);
+
+      // Déclencher le téléchargement / enregistrement Android
+      await downloadFile(pdfBytes, safeFilename);
+
+      setTimeout(() => {
+        setDownloadBtnStatus('idle');
+      }, 4000);
     } catch (e) {
       console.error('Error converting images to PDF:', e);
       alert('Une erreur est survenue lors de la conversion des images.');
+      setDownloadBtnStatus('idle');
     } finally {
       setIsProcessing(false);
     }
@@ -918,12 +931,21 @@ export const ImagesToPdfTool: React.FC = () => {
                 type="button"
                 disabled={isProcessing || images.length === 0}
                 onClick={handleConvert}
-                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-lg shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                className={`inline-flex items-center justify-center gap-2 px-6 py-2.5 text-xs font-semibold text-white rounded-lg shadow-sm transition-all disabled:opacity-50 cursor-pointer ${
+                  downloadBtnStatus === 'success'
+                    ? 'bg-emerald-600 ring-2 ring-emerald-300'
+                    : 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800'
+                }`}
               >
-                {isProcessing ? (
+                {downloadBtnStatus === 'generating' ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Conversion en cours...</span>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Création du PDF...</span>
+                  </>
+                ) : downloadBtnStatus === 'success' ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-white" />
+                    <span>✓ PDF Enregistré !</span>
                   </>
                 ) : (
                   <>
@@ -936,11 +958,86 @@ export const ImagesToPdfTool: React.FC = () => {
           </div>
 
           {successMessage && (
-            <div className="flex items-center gap-2 p-3 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-              <span>{successMessage}</span>
+            <div className="flex flex-col gap-2 p-3 text-xs text-emerald-900 bg-emerald-50 border border-emerald-300 rounded-xl">
+              <div className="flex items-center gap-2 font-bold text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{successMessage}</span>
+              </div>
+              {lastGeneratedPdf && (
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-emerald-200">
+                  <button
+                    type="button"
+                    onClick={() => downloadFile(lastGeneratedPdf.bytes, lastGeneratedPdf.name)}
+                    className="py-1.5 px-3 rounded-lg bg-emerald-600 text-white font-bold flex items-center gap-1.5 hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Télécharger à nouveau</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenPreview}
+                    className="py-1.5 px-3 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-semibold flex items-center gap-1.5 hover:bg-emerald-100 transition-colors cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Visualiser</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL DE SUCCÈS INTERACTIVE */}
+      {showDoneModal && lastGeneratedPdf && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-sm p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Votre PDF est prêt !
+              </h3>
+              <p className="text-xs text-slate-500 font-mono truncate px-2">
+                {lastGeneratedPdf.name} ({formatBytes(lastGeneratedPdf.bytes.byteLength)})
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDoneModal(false);
+                  handleOpenPreview();
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold flex items-center justify-center gap-2 shadow-xs hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <Eye className="w-4 h-4" />
+                <span>Ouvrir et Visualiser le PDF</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await downloadFile(lastGeneratedPdf.bytes, lastGeneratedPdf.name);
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Enregistrer / Partager le fichier</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowDoneModal(false)}
+                className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors cursor-pointer text-center"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

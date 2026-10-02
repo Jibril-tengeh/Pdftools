@@ -2,7 +2,14 @@ import { PDFDocument, rgb, degrees, StandardFonts, PDFName, PDFString } from 'pd
 import { pdfjsLib } from './pdfWorker';
 import { encryptPDF } from '@pdfsmaller/pdf-encrypt';
 import { createWorker } from 'tesseract.js';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import type { WatermarkOptions, WatermarkItem, MetadataOptions, PageSizeOption, ImageGridModeOption } from '../types';
+
+interface AndroidDownloaderPlugin {
+  saveBase64File(options: { base64Data: string; filename: string; mimeType: string }): Promise<void>;
+}
+
+const AndroidDownloader = registerPlugin<AndroidDownloaderPlugin>('AndroidDownloader');
 
 function escapeXml(str: string): string {
   return str
@@ -107,19 +114,108 @@ export function safePdfText(font: any, raw: string | null | undefined): string {
   return result;
 }
 
+declare global {
+  interface Window {
+    AndroidDownloader?: {
+      saveBase64File: (base64Data: string, filename: string, mimeType: string) => boolean;
+    };
+  }
+}
+
 /**
- * Downloads a Uint8Array or Blob or ArrayBuffer as a file in the browser
+ * Downloads a Uint8Array or Blob or ArrayBuffer as a file.
+ * Compatible with Android Native WebView (Capacitor/Java), Web Share API, and desktop browsers.
  */
-export function downloadFile(data: Uint8Array | Blob | ArrayBuffer, filename: string, mimeType = 'application/pdf') {
+export async function downloadFile(
+  data: Uint8Array | Blob | ArrayBuffer,
+  filename: string,
+  mimeType = 'application/pdf'
+): Promise<boolean> {
   const blob = data instanceof Blob ? data : new Blob([data as any], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+  // 1. Essai Plugin Capacitor natif (sur APK Android)
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const res = reader.result as string;
+          resolve(res.includes(',') ? res.split(',')[1] : res);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(blob);
+      const base64Data = await base64Promise;
+
+      await AndroidDownloader.saveBase64File({
+        base64Data,
+        filename,
+        mimeType,
+      });
+      return true;
+    } catch (pluginErr) {
+      console.warn('Capacitor AndroidDownloader failed, trying JavascriptInterface:', pluginErr);
+    }
+  }
+
+  // 2. Interface Android Native Java (si WebView avec AndroidDownloader injecté)
+  if (typeof window !== 'undefined' && (window as any).AndroidDownloader) {
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const res = reader.result as string;
+          resolve(res.includes(',') ? res.split(',')[1] : res);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(blob);
+      const base64Data = await base64Promise;
+
+      const success = (window as any).AndroidDownloader.saveBase64File(base64Data, filename, mimeType);
+      if (success) return true;
+    } catch (err) {
+      console.warn('AndroidDownloader interface failed:', err);
+    }
+  }
+
+  // 3. Web Share API avec fichier réel (ouvre la feuille native Android pour sauvegarder dans Téléchargements ou Drive)
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      const file = new File([blob], filename, { type: mimeType });
+      if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: filename,
+        });
+        return true;
+      }
+    } catch (shareErr: any) {
+      if (shareErr?.name !== 'AbortError') {
+        console.warn('Web Share API error:', shareErr);
+      }
+    }
+  }
+
+  // 4. Fallback navigateur classique
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 15000);
+    return true;
+  } catch (e) {
+    console.error('Download fallback error:', e);
+    return false;
+  }
 }
 
 /**

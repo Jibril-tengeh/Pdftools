@@ -124,6 +124,7 @@ export const CategoryTab3D: React.FC<CategoryTab3DProps> = ({
           color: isActive ? '#ffffff' : 'var(--tab-inactive-color, #1e293b)',
         }}
       >
+        {/* Specular Interactive 3D Glare */}
         <div
           className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl transition-opacity duration-200 overflow-hidden"
           style={{
@@ -133,6 +134,7 @@ export const CategoryTab3D: React.FC<CategoryTab3DProps> = ({
           }}
         />
 
+        {/* Ambient Animated Shimmer when active */}
         {isActive && (
           <div
             className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl overflow-hidden"
@@ -142,11 +144,13 @@ export const CategoryTab3D: React.FC<CategoryTab3DProps> = ({
           </div>
         )}
 
+        {/* Top 3D Highlight Bevel Edge */}
         <div
           className="pointer-events-none absolute inset-x-1.5 top-0.5 h-[1px] rounded-t-lg bg-gradient-to-r from-transparent via-white/60 to-transparent"
           style={{ transform: 'translateZ(10px)' }}
         />
 
+        {/* Icon with Pop-out 3D Depth */}
         <div
           className="shrink-0 transition-transform duration-200"
           style={{
@@ -168,6 +172,7 @@ export const CategoryTab3D: React.FC<CategoryTab3DProps> = ({
           </div>
         </div>
 
+        {/* Menu Label: Réduit de 2px, parfaitement lisible et compact */}
         <div
           className="shrink-0 transition-transform duration-200"
           style={{
@@ -183,6 +188,7 @@ export const CategoryTab3D: React.FC<CategoryTab3DProps> = ({
           </span>
         </div>
 
+        {/* Floating 3D Count Badge positioned at top right */}
         <div
           className="absolute -top-1 -right-0.5 sm:-top-1.5 sm:-right-1 transition-transform duration-200 z-10"
           style={{
@@ -201,6 +207,7 @@ export const CategoryTab3D: React.FC<CategoryTab3DProps> = ({
         </div>
       </button>
 
+      {/* 3D Ground Shadow Reflection on surface */}
       <div
         className={`pointer-events-none absolute -bottom-1 inset-x-2 h-1.5 rounded-full transition-all duration-300 blur-[2px] -z-10 ${
           isActive
