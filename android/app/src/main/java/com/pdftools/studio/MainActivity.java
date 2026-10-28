@@ -113,6 +113,17 @@ public class MainActivity extends BridgeActivity {
             }
 
             return true;
+        } catch (OutOfMemoryError oom) {
+            oom.printStackTrace();
+            if (activity != null) {
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(context, "Mémoire insuffisante pour ce fichier volumineux", Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+            return false;
         } catch (Exception e) {
             e.printStackTrace();
             return false;

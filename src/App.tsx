@@ -49,6 +49,7 @@ import type { ToolId } from './types';
 export default function App() {
   const [currentTool, setCurrentTool] = useState<ToolId>('home');
   const [sampleBuffer, setSampleBuffer] = useState<ArrayBuffer | null>(null);
+  const [sampleFileName, setSampleFileName] = useState<string>('document_exemple.pdf');
   const [isGeneratingSample, setIsGeneratingSample] = useState(false);
 
   // Global Dark Mode state synced with localStorage
@@ -71,6 +72,20 @@ export default function App() {
       localStorage.setItem('pdf_media_theme', 'light');
     }
   }, [isDarkMode]);
+
+  useEffect(() => {
+    const handleOpenInTool = (e: any) => {
+      const { toolId, buffer, filename } = e.detail || {};
+      if (toolId && buffer) {
+        setSampleBuffer(buffer);
+        setSampleFileName(filename || 'document_modifie.pdf');
+        setCurrentTool(toolId);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
+    window.addEventListener('open_pdf_in_tool', handleOpenInTool);
+    return () => window.removeEventListener('open_pdf_in_tool', handleOpenInTool);
+  }, []);
 
   // Generate a realistic multi-page PDF sample
   const handleGenerateSample = async (targetTool?: ToolId) => {
@@ -186,6 +201,7 @@ export default function App() {
             onUseSample={() => handleGenerateSample('merge')}
             isGeneratingSample={isGeneratingSample}
             sampleBuffer={sampleBuffer}
+            sampleFileName={sampleFileName}
           />
         )}
 
@@ -202,6 +218,7 @@ export default function App() {
             onUseSample={() => handleGenerateSample('organize')}
             isGeneratingSample={isGeneratingSample}
             sampleBuffer={sampleBuffer}
+            sampleFileName={sampleFileName}
           />
         )}
 

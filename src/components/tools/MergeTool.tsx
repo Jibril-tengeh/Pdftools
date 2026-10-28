@@ -9,16 +9,37 @@ interface MergeToolProps {
   onUseSample: () => void;
   isGeneratingSample: boolean;
   sampleBuffer?: ArrayBuffer | null;
+  sampleFileName?: string;
 }
 
 export const MergeTool: React.FC<MergeToolProps> = ({
   onUseSample,
   isGeneratingSample,
+  sampleBuffer,
+  sampleFileName,
 }) => {
   const [files, setFiles] = useState<PDFFileInfo[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [outputFileName, setOutputFileName] = useState('document_fusionne.pdf');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (sampleBuffer) {
+      const initialName = sampleFileName || 'document_initial.pdf';
+      getPdfPageCount(sampleBuffer).then((pageCount) => {
+        setFiles([
+          {
+            id: `doc-1-${Date.now()}`,
+            file: new File([sampleBuffer], initialName, { type: 'application/pdf' }),
+            name: initialName,
+            size: sampleBuffer.byteLength,
+            pageCount,
+            arrayBuffer: sampleBuffer,
+          },
+        ]);
+      });
+    }
+  }, [sampleBuffer, sampleFileName]);
 
   const handleFilesAdded = async (newFiles: File[]) => {
     const fileInfos: PDFFileInfo[] = [];

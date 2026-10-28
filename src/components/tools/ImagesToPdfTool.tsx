@@ -71,47 +71,81 @@ export const ImagesToPdfTool: React.FC = () => {
   const [previewTotalPages, setPreviewTotalPages] = useState<number>(1);
   const [previewThumbnailUrl, setPreviewThumbnailUrl] = useState<string | null>(null);
 
+  const optimizeAndReadImage = async (file: File): Promise<{ dataUrl: string; width: number; height: number }> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const naturalW = img.naturalWidth || 800;
+        const naturalH = img.naturalHeight || 600;
+
+        // Limiter la taille max à 2048px pour éviter les crashs de mémoire RAM (OOM) sur Android
+        const MAX_DIM = 2048;
+        if (naturalW > MAX_DIM || naturalH > MAX_DIM) {
+          const ratio = Math.min(MAX_DIM / naturalW, MAX_DIM / naturalH);
+          const targetW = Math.round(naturalW * ratio);
+          const targetH = Math.round(naturalH * ratio);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, targetW, targetH);
+            const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            resolve({ dataUrl: optimizedDataUrl, width: targetW, height: targetH });
+            return;
+          }
+        }
+
+        // Si dimensions raisonnables, convertir de manière sûre
+        const canvas = document.createElement('canvas');
+        canvas.width = naturalW;
+        canvas.height = naturalH;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const format = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          const dataUrl = canvas.toDataURL(format, 0.9);
+          resolve({ dataUrl, width: naturalW, height: naturalH });
+        } else {
+          const reader = new FileReader();
+          reader.onload = () => resolve({ dataUrl: reader.result as string, width: naturalW, height: naturalH });
+          reader.onerror = () => resolve({ dataUrl: '', width: 800, height: 600 });
+          reader.readAsDataURL(file);
+        }
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve({ dataUrl: '', width: 800, height: 600 });
+      };
+
+      img.src = objectUrl;
+    });
+  };
+
   const handleImagesSelected = async (files: File[]) => {
     const newItems: ImageToPdfItem[] = [];
 
     for (const file of files) {
       if (!file.type.startsWith('image/')) continue;
-      const dataUrl = await readFileAsDataUrl(file);
-      const dims = await getImageDimensions(dataUrl);
+      const { dataUrl, width, height } = await optimizeAndReadImage(file);
+      if (!dataUrl) continue;
 
       newItems.push({
         id: `${file.name}-${Date.now()}-${Math.random()}`,
         file,
         dataUrl,
-        width: dims.width,
-        height: dims.height,
+        width,
+        height,
       });
     }
 
     setImages((prev) => [...prev, ...newItems]);
     setSuccessMessage(null);
-  };
-
-  const readFileAsDataUrl = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const getImageDimensions = (dataUrl: string): Promise<{ width: number; height: number }> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        resolve({ width: img.naturalWidth, height: img.naturalHeight });
-      };
-      img.onerror = () => {
-        resolve({ width: 800, height: 600 });
-      };
-      img.src = dataUrl;
-    });
   };
 
   const moveUp = (idx: number) => {

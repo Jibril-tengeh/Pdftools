@@ -22,12 +22,14 @@ interface OrganizeToolProps {
   onUseSample: () => void;
   isGeneratingSample: boolean;
   sampleBuffer?: ArrayBuffer | null;
+  sampleFileName?: string;
 }
 
 export const OrganizeTool: React.FC<OrganizeToolProps> = ({
   onUseSample,
   isGeneratingSample,
   sampleBuffer,
+  sampleFileName,
 }) => {
   const [buffer, setBuffer] = useState<ArrayBuffer | null>(null);
   const [fileName, setFileName] = useState<string>('');
@@ -36,10 +38,10 @@ export const OrganizeTool: React.FC<OrganizeToolProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (sampleBuffer && !buffer) {
-      loadBuffer(sampleBuffer, 'document_exemple.pdf');
+    if (sampleBuffer) {
+      loadBuffer(sampleBuffer, sampleFileName || 'document_modifie.pdf');
     }
-  }, [sampleBuffer]);
+  }, [sampleBuffer, sampleFileName]);
 
   const loadBuffer = async (rawBuffer: ArrayBuffer, name: string) => {
     setBuffer(rawBuffer);
