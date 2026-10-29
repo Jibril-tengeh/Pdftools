@@ -21,6 +21,11 @@ import {
   Stamp,
   Type,
   Palette,
+  CheckSquare,
+  Square,
+  ArrowUpDown,
+  ArrowDownAZ,
+  ArrowUpZA,
 } from 'lucide-react';
 import { DropZone } from '../DropZone';
 import { convertImagesToPdf, addWatermarkToPdf, downloadFile, formatBytes, renderPdfThumbnail } from '../../utils/pdfOperations';
@@ -62,6 +67,10 @@ export const ImagesToPdfTool: React.FC = () => {
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Fast selection & range state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
   // Preview Modal State
   const [showPreviewModal, setShowPreviewModal] = useState<boolean>(false);
@@ -172,6 +181,112 @@ export const ImagesToPdfTool: React.FC = () => {
 
   const removeImage = (id: string) => {
     setImages((prev) => prev.filter((img) => img.id !== id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  // Toggle single image selection with Shift range support
+  const toggleSelectImage = (id: string, shiftKey?: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && lastSelectedId) {
+        const lastIdx = images.findIndex((img) => img.id === lastSelectedId);
+        const currentIdx = images.findIndex((img) => img.id === id);
+        if (lastIdx !== -1 && currentIdx !== -1) {
+          const start = Math.min(lastIdx, currentIdx);
+          const end = Math.max(lastIdx, currentIdx);
+          for (let i = start; i <= end; i++) {
+            next.add(images[i].id);
+          }
+          return next;
+        }
+      }
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    setLastSelectedId(id);
+  };
+
+  // Select all or deselect all
+  const toggleSelectAll = () => {
+    if (selectedIds.size === images.length && images.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(images.map((img) => img.id)));
+    }
+  };
+
+  // Select range: from 1st image to specified image (1ère à cible)
+  const selectFirstToCurrent = (id: string) => {
+    const idx = images.findIndex((img) => img.id === id);
+    if (idx !== -1) {
+      const next = new Set<string>();
+      for (let i = 0; i <= idx; i++) {
+        next.add(images[i].id);
+      }
+      setSelectedIds(next);
+      setLastSelectedId(id);
+    }
+  };
+
+  // Select range: from specified image to last image (cible à dernière)
+  const selectCurrentToLast = (id: string) => {
+    const idx = images.findIndex((img) => img.id === id);
+    if (idx !== -1) {
+      const next = new Set<string>();
+      for (let i = idx; i < images.length; i++) {
+        next.add(images[i].id);
+      }
+      setSelectedIds(next);
+      setLastSelectedId(id);
+    }
+  };
+
+  // Select from first to last (Tout sélectionner de 1 à N)
+  const selectFirstToLast = () => {
+    setSelectedIds(new Set(images.map((img) => img.id)));
+  };
+
+  // Reverse list order (1ère devient dernière, dernière devient 1ère)
+  const handleReverseOrder = () => {
+    setImages((prev) => [...prev].reverse());
+    setPreviewPdfBytes(null);
+  };
+
+  // Sort ascending: 1ère à dernière (A -> Z / 1 -> N)
+  const handleSortAsc = () => {
+    setImages((prev) =>
+      [...prev].sort((a, b) =>
+        a.file.name.localeCompare(b.file.name, undefined, { numeric: true, sensitivity: 'base' })
+      )
+    );
+    setPreviewPdfBytes(null);
+  };
+
+  // Sort descending: dernière à 1ère (Z -> A / N -> 1)
+  const handleSortDesc = () => {
+    setImages((prev) =>
+      [...prev].sort((a, b) =>
+        b.file.name.localeCompare(a.file.name, undefined, { numeric: true, sensitivity: 'base' })
+      )
+    );
+    setPreviewPdfBytes(null);
+  };
+
+  // Bulk delete selected images
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    setImages((prev) => prev.filter((img) => !selectedIds.has(img.id)));
+    setSelectedIds(new Set());
+    setLastSelectedId(null);
+    setPreviewPdfBytes(null);
   };
 
   // Compile PDF with all advanced options
@@ -849,72 +964,199 @@ export const ImagesToPdfTool: React.FC = () => {
             )}
           </div>
 
+          {/* Quick Selection & Ordering Toolbar */}
+          <div className="bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                  {images.length} photo{images.length > 1 ? 's' : ''}
+                </span>
+                {selectedIds.size > 0 && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                    {selectedIds.size} sélectionnée{selectedIds.size > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* Select All */}
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                  title="Sélectionner ou désélectionner toutes les photos"
+                >
+                  {selectedIds.size === images.length && images.length > 0 ? (
+                    <>
+                      <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Tout désélect.</span>
+                    </>
+                  ) : (
+                    <>
+                      <Square className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Tout sélection. (1ère à dernière)</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Inverser l'ordre (1ère ⇄ Dernière) */}
+                <button
+                  type="button"
+                  onClick={handleReverseOrder}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                  title="Inverser complètement l'ordre (la dernière devient la 1ère et la 1ère devient la dernière)"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Inverser (1ère ⇄ Dernière)</span>
+                </button>
+
+                {/* Trier 1ère à dernière (A -> Z) */}
+                <button
+                  type="button"
+                  onClick={handleSortAsc}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                  title="Trier de la 1ère à la dernière par nom de fichier (A à Z)"
+                >
+                  <ArrowDownAZ className="w-3.5 h-3.5 text-sky-500" />
+                  <span>1ère à Dernière (A→Z)</span>
+                </button>
+
+                {/* Trier dernière à 1ère (Z -> A) */}
+                <button
+                  type="button"
+                  onClick={handleSortDesc}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                  title="Trier de la dernière à la 1ère par nom de fichier (Z à A)"
+                >
+                  <ArrowUpZA className="w-3.5 h-3.5 text-purple-500" />
+                  <span>Dernière à 1ère (Z→A)</span>
+                </button>
+
+                {/* Delete selected */}
+                {selectedIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteSelected}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                    title="Supprimer les photos sélectionnées"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Supprimer ({selectedIds.size})</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Images List */}
           <div className="space-y-2.5">
-            {images.map((img, idx) => (
-              <div
-                key={img.id}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 flex items-center justify-between gap-4"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-mono font-bold text-slate-600 dark:text-slate-300 shrink-0">
-                    {idx + 1}
-                  </div>
-                  <div className="w-14 h-14 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden flex items-center justify-center shrink-0 p-0.5">
-                    <img
-                      src={img.dataUrl}
-                      alt={img.file.name}
-                      className="w-full h-full object-contain"
-                      referrerPolicy="no-referrer"
+            {images.map((img, idx) => {
+              const isSelected = selectedIds.has(img.id);
+              return (
+                <div
+                  key={img.id}
+                  className={`border rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                    isSelected
+                      ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400 dark:border-emerald-600 shadow-xs'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* Checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => toggleSelectImage(img.id, (e.nativeEvent as MouseEvent).shiftKey)}
+                      className="w-4 h-4 rounded text-emerald-600 accent-emerald-600 cursor-pointer shrink-0"
+                      title="Sélectionner cette photo"
                     />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{img.file.name}</p>
-                    <p className="text-[11px] text-slate-400 font-mono">
-                      {img.width} × {img.height} px · {formatBytes(img.file.size)}
-                    </p>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    disabled={idx === 0}
-                    onClick={() => {
-                      moveUp(idx);
-                      setPreviewPdfBytes(null);
-                    }}
-                    title="Monter"
-                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md disabled:opacity-30 cursor-pointer"
-                  >
-                    <ArrowUp className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={idx === images.length - 1}
-                    onClick={() => {
-                      moveDown(idx);
-                      setPreviewPdfBytes(null);
-                    }}
-                    title="Descendre"
-                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md disabled:opacity-30 cursor-pointer"
-                  >
-                    <ArrowDown className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      removeImage(img.id);
-                      setPreviewPdfBytes(null);
-                    }}
-                    title="Supprimer"
-                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-md cursor-pointer ml-1"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    {/* Order Index */}
+                    <div className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-mono font-bold text-slate-600 dark:text-slate-300 shrink-0">
+                      {idx + 1}
+                    </div>
+
+                    {/* Thumbnail */}
+                    <div className="w-14 h-14 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden flex items-center justify-center shrink-0 p-0.5">
+                      <img
+                        src={img.dataUrl}
+                        alt={img.file.name}
+                        className="w-full h-full object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+
+                    {/* Meta info */}
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{img.file.name}</p>
+                      <p className="text-[11px] text-slate-400 font-mono">
+                        {img.width} × {img.height} px · {formatBytes(img.file.size)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between sm:justify-end gap-1.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
+                    {/* Range select buttons */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => selectFirstToCurrent(img.id)}
+                        className="px-2 py-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
+                        title="Sélectionner toutes les photos de la 1ère jusqu'à celle-ci"
+                      >
+                        1ère → ici
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => selectCurrentToLast(img.id)}
+                        className="px-2 py-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
+                        title="Sélectionner toutes les photos de celle-ci jusqu'à la dernière"
+                      >
+                        Ici → dernière
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => {
+                          moveUp(idx);
+                          setPreviewPdfBytes(null);
+                        }}
+                        title="Monter"
+                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md disabled:opacity-30 cursor-pointer"
+                      >
+                        <ArrowUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === images.length - 1}
+                        onClick={() => {
+                          moveDown(idx);
+                          setPreviewPdfBytes(null);
+                        }}
+                        title="Descendre"
+                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md disabled:opacity-30 cursor-pointer"
+                      >
+                        <ArrowDown className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          removeImage(img.id);
+                          setPreviewPdfBytes(null);
+                        }}
+                        title="Supprimer"
+                        className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-md cursor-pointer ml-1"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Action buttons: PREVIEW + SAVE */}

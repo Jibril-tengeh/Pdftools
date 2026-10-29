@@ -17,6 +17,9 @@ import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileOutputStream;
 import android.widget.Toast;
+import java.util.List;
+import java.util.ArrayList;
+import android.content.pm.PackageManager;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -30,12 +33,36 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DownloaderPlugin.class);
         super.onCreate(savedInstanceState);
         setupDownloader();
+        requestStoragePermissions();
     }
 
     @Override
     public void onStart() {
         super.onStart();
         setupDownloader();
+    }
+
+    private void requestStoragePermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            List<String> perms = new ArrayList<>();
+            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                perms.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            }
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                perms.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
+                    perms.add(android.Manifest.permission.READ_MEDIA_IMAGES);
+                }
+                if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    perms.add(android.Manifest.permission.POST_NOTIFICATIONS);
+                }
+            }
+            if (!perms.isEmpty()) {
+                requestPermissions(perms.toArray(new String[0]), 2001);
+            }
+        }
     }
 
     private void setupDownloader() {
@@ -51,38 +78,18 @@ public class MainActivity extends BridgeActivity {
     public static boolean doSaveFile(Context context, android.app.Activity activity, String base64Data, String filename, String mimeType) {
         try {
             byte[] data = Base64.decode(base64Data, Base64.DEFAULT);
+            boolean saved = false;
 
-            // 1. Écriture physique directe dans le dossier Téléchargements (/storage/emulated/0/Download)
-            File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-            if (!downloadsDir.exists()) {
-                downloadsDir.mkdirs();
-            }
-
-            File targetFile = new File(downloadsDir, filename);
-            if (targetFile.exists()) {
-                String nameOnly = filename.contains(".") ? filename.substring(0, filename.lastIndexOf('.')) : filename;
-                String ext = filename.contains(".") ? filename.substring(filename.lastIndexOf('.')) : "";
-                targetFile = new File(downloadsDir, nameOnly + "_" + (System.currentTimeMillis() % 10000) + ext);
-            }
-
-            try (FileOutputStream fos = new FileOutputStream(targetFile)) {
-                fos.write(data);
-                fos.flush();
-            }
-
-            final String savedFileName = targetFile.getName();
-            final String savedFilePath = targetFile.getAbsolutePath();
-
-            // 2. Sur Android 10+ (Q+), insérer également dans MediaStore avec la colonne RELATIVE_PATH obligatoire
+            // 1. Sauvegarde via MediaStore officiel Android 10+ (Range dans Download sur le stockage sans blocage de permission)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 try {
                     ContentValues values = new ContentValues();
-                    values.put(MediaStore.Downloads.DISPLAY_NAME, savedFileName);
-                    values.put(MediaStore.Downloads.MIME_TYPE, mimeType);
-                    values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
-                    values.put(MediaStore.Downloads.IS_PENDING, 0);
+                    values.put(MediaStore.MediaColumns.DISPLAY_NAME, filename);
+                    values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+                    values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 1);
 
-                    Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+                    Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
                     Uri itemUri = context.getContentResolver().insert(collection, values);
 
                     if (itemUri != null) {
@@ -90,57 +97,83 @@ public class MainActivity extends BridgeActivity {
                             if (os != null) {
                                 os.write(data);
                                 os.flush();
+                                saved = true;
                             }
                         }
+                        values.clear();
+                        values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                        context.getContentResolver().update(itemUri, values, null, null);
                     }
                 } catch (Exception qEx) {
                     qEx.printStackTrace();
                 }
             }
 
-            // 3. Scanner le fichier avec MediaScannerConnection pour forcer son affichage immédiat dans le Gestionnaire de Fichiers
+            // 2. Écriture physique directe dans /storage/emulated/0/Download
+            File directTargetFile = null;
             try {
+                File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                if (!downloadsDir.exists()) {
+                    downloadsDir.mkdirs();
+                }
+
+                directTargetFile = new File(downloadsDir, filename);
+                if (directTargetFile.exists()) {
+                    String nameOnly = filename.contains(".") ? filename.substring(0, filename.lastIndexOf('.')) : filename;
+                    String ext = filename.contains(".") ? filename.substring(filename.lastIndexOf('.')) : "";
+                    directTargetFile = new File(downloadsDir, nameOnly + "_" + (System.currentTimeMillis() % 10000) + ext);
+                }
+
+                try (FileOutputStream fos = new FileOutputStream(directTargetFile)) {
+                    fos.write(data);
+                    fos.flush();
+                    saved = true;
+                }
+
+                // Scanner pour actualiser le gestionnaire de fichiers
                 MediaScannerConnection.scanFile(
                     context,
-                    new String[]{ savedFilePath },
+                    new String[]{ directTargetFile.getAbsolutePath() },
                     new String[]{ mimeType },
                     null
                 );
-            } catch (Exception scanEx) {
-                scanEx.printStackTrace();
+            } catch (Exception directEx) {
+                directEx.printStackTrace();
             }
 
-            // 4. Enregistrer dans le DownloadManager officiel Android (pour apparaître dans l'app Téléchargements & notification)
-            try {
-                DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
-                if (dm != null) {
-                    dm.addCompletedDownload(
-                        savedFileName,
-                        "Fichier PDF créé avec PDF Tools",
-                        true,
-                        mimeType,
-                        savedFilePath,
-                        targetFile.length(),
-                        true
-                    );
+            // 3. Enregistrer dans le DownloadManager officiel Android
+            if (directTargetFile != null && directTargetFile.exists()) {
+                try {
+                    DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
+                    if (dm != null) {
+                        dm.addCompletedDownload(
+                            directTargetFile.getName(),
+                            "Fichier PDF créé avec PDF Tools",
+                            true,
+                            mimeType,
+                            directTargetFile.getAbsolutePath(),
+                            directTargetFile.length(),
+                            true
+                        );
+                    }
+                } catch (Exception dmEx) {
+                    dmEx.printStackTrace();
                 }
-            } catch (Exception dmEx) {
-                dmEx.printStackTrace();
             }
 
-            // 5. Notification Toast sur l'écran avec le chemin clair
+            // 4. Notification Toast sur l'écran
             if (activity != null) {
                 activity.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Toast.makeText(context, "✓ Enregistré dans Téléchargements : " + savedFileName, Toast.LENGTH_LONG).show();
+                        Toast.makeText(context, "✓ Fichier enregistré dans Téléchargements : " + filename, Toast.LENGTH_LONG).show();
                     }
                 });
             }
 
-            // 6. Ouvrir la feuille Android (Ouvrir avec un lecteur PDF ou Partager)
+            // 5. Ouvrir la feuille Android (Ouvrir avec un lecteur PDF ou Enregistrer dans Fichiers)
             try {
-                File cacheFile = new File(context.getCacheDir(), savedFileName);
+                File cacheFile = new File(context.getCacheDir(), filename);
                 try (FileOutputStream cacheFos = new FileOutputStream(cacheFile)) {
                     cacheFos.write(data);
                     cacheFos.flush();
@@ -157,14 +190,14 @@ public class MainActivity extends BridgeActivity {
                 sendIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
                 sendIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-                Intent chooser = Intent.createChooser(sendIntent, "Ouvrir ou partager " + savedFileName);
+                Intent chooser = Intent.createChooser(sendIntent, "Ouvrir ou partager " + filename);
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 context.startActivity(chooser);
             } catch (Exception shareEx) {
                 shareEx.printStackTrace();
             }
 
-            return true;
+            return saved;
         } catch (OutOfMemoryError oom) {
             oom.printStackTrace();
             if (activity != null) {
@@ -186,6 +219,11 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public boolean saveBase64File(String base64Data, String filename, String mimeType) {
             return doSaveFile(MainActivity.this, MainActivity.this, base64Data, filename, mimeType);
+        }
+
+        @JavascriptInterface
+        public void requestStoragePermissions() {
+            MainActivity.this.requestStoragePermissions();
         }
     }
 
